@@ -1,0 +1,136 @@
+
+import argparse
+import json
+from pathlib import Path
+from datetime import date
+
+DATA_FILE = Path("tasks.json")
+
+
+def load_tasks():
+    try:
+        with DATA_FILE.open("r") as file:
+            data = json.load(file)
+            return data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def save_tasks(tasks):
+    with DATA_FILE.open("w") as file:
+        json.dump(tasks, file, indent=4)
+
+
+def add_task(args):
+    tasks = load_tasks()
+
+    task = {
+        "id": max((t["id"] for t in tasks), default=0) + 1,
+        "title": args.title,
+        "status": "pending",
+        "due_date": args.due
+    }
+
+    tasks.append(task)
+    save_tasks(tasks)
+    print(f"Task added: {task['title']} (ID: {task['id']})")
+
+
+def list_tasks(args):
+    tasks = load_tasks()
+
+    if args.status:
+        tasks = [t for t in tasks if t["status"] == args.status]
+
+    if args.due:
+        tasks = [t for t in tasks if t["due_date"] == args.due]
+
+    if not tasks:
+        print("No tasks found.")
+        return
+
+    for task in tasks:
+        print(
+            f"ID: {task['id']} | {task['title']} | "
+            f"{task['status']} | Due: {task['due_date']}"
+        )
+
+
+def complete_task(args):
+    tasks = load_tasks()
+
+    for task in tasks:
+        if task["id"] == args.id:
+            task["status"] = "completed"
+            save_tasks(tasks)
+            print("Task completed successfully!")
+            return
+
+    print("Task not found.")
+
+
+def delete_task(args):
+    tasks = load_tasks()
+    updated = [t for t in tasks if t["id"] != args.id]
+
+    if len(updated) == len(tasks):
+        print("Task not found.")
+        return
+
+    save_tasks(updated)
+    print("Task deleted successfully!")
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        description="A simple command-line task manager"
+    )
+
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True
+    )
+
+    add_parser = subparsers.add_parser("add", help="Add a task")
+    add_parser.add_argument("title", help="Task title")
+    add_parser.add_argument("--due", default="No date")
+    add_parser.set_defaults(func=add_task)
+
+    list_parser = subparsers.add_parser("list", help="List tasks")
+    list_parser.add_argument(
+        "--status",
+        choices=["pending", "completed"]
+    )
+    list_parser.add_argument("--due")
+    list_parser.set_defaults(func=list_tasks)
+
+    done_parser = subparsers.add_parser(
+        "done", help="Complete a task"
+    )
+    done_parser.add_argument("id", type=int)
+    done_parser.set_defaults(func=complete_task)
+
+    delete_parser = subparsers.add_parser(
+        "delete", help="Delete a task"
+    )
+    delete_parser.add_argument("id", type=int)
+    delete_parser.set_defaults(func=delete_task)
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if args.command == "add" and args.due != "No date":
+        try:
+            date.fromisoformat(args.due)
+        except ValueError:
+            parser.error("Due date must use YYYY-MM-DD format.")
+
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
